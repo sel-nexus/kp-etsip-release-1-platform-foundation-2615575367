@@ -13,16 +13,17 @@ const metrics = { enterpriseQualityScore: 81, applicationHealthScore: 62, automa
 const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
-it('shows metrics and portfolio lists and sends selected filters', async () => {
-  const fetcher = vi.spyOn(globalThis, 'fetch').mockImplementation(async url => String(url).includes('/dashboard') ? json(metrics) : json({ items: [portfolio], total: 1 }));
+it('shows metrics and updates them for selected filters', async () => {
+  const fetcher = vi.spyOn(globalThis, 'fetch').mockImplementation(async url => String(url).includes('/dashboard') ? json(String(url).includes('riskLevel=High') ? { ...metrics, totalApplications: 1 } : metrics) : json({ items: [portfolio], total: 1 }));
   render(<MemoryRouter><Dashboard /></MemoryRouter>);
   expect(await screen.findByText('Enterprise Quality Score')).toBeInTheDocument();
   expect(screen.getByRole('link', { name: 'Payments' })).toHaveAttribute('href', '/portfolios/p');
   await userEvent.setup().selectOptions(screen.getByLabelText('Risk level'), 'High');
   await waitFor(() => expect(fetcher.mock.calls.some(([url]) => String(url).includes('riskLevel=High'))).toBe(true));
+  await waitFor(() => expect(screen.getByText('Total Applications').parentElement).toHaveTextContent('1'));
 });
 
-it('shows empty averages and request errors', async () => {
+it('shows empty averages and empty portfolio breakdowns', async () => {
   vi.spyOn(globalThis, 'fetch').mockImplementation(async url => String(url).includes('/dashboard') ? json({ ...metrics, enterpriseQualityScore: null, portfolios: [] }) : json({ items: [], total: 0 }));
   render(<MemoryRouter><Dashboard /></MemoryRouter>);
   expect(await screen.findByText('—')).toBeInTheDocument();
@@ -31,7 +32,7 @@ it('shows empty averages and request errors', async () => {
 
 it('switches report tables, applies filters and hides export for read-only users', async () => {
   const fetcher = vi.spyOn(globalThis, 'fetch').mockImplementation(async url => {
-    if (String(url).includes('/reports/portfolios')) return json({ items: [portfolio], total: 1, offset: 0, limit: 25 });
+    if (String(url).includes('/reports/portfolios')) return json({ items: String(url).includes('riskLevel=High') ? [] : [portfolio], total: String(url).includes('riskLevel=High') ? 0 : 1, offset: 0, limit: 25 });
     if (String(url).includes('/reports/applications')) return json({ items: [], total: 0, offset: 0, limit: 25 });
     return json({ items: [portfolio], total: 1 });
   });
@@ -42,6 +43,7 @@ it('switches report tables, applies filters and hides export for read-only users
   expect(await screen.findByRole('link', { name: 'Payments' })).toBeInTheDocument();
   await userEvent.setup().selectOptions(screen.getByLabelText('Risk level'), 'High');
   await waitFor(() => expect(fetcher.mock.calls.some(([url]) => String(url).includes('/reports/portfolios?') && String(url).includes('riskLevel=High'))).toBe(true));
+  expect(await screen.findByText('No records match these filters.')).toBeInTheDocument();
 });
 
 it('shows a denied export to an otherwise export-capable role', async () => {

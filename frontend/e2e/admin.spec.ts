@@ -22,6 +22,20 @@ test('administrator creates and deactivates an account and reviews its audit eve
   await expect(page.getByText('User saved.')).toBeVisible();
   await page.getByLabel('Search users').fill(person);
   await expect(page.getByText(person)).toBeVisible();
+  await page.getByRole('button', { name: 'Edit E2E Admin User' }).click();
+  await page.getByLabel('Role').selectOption('Portfolio Leader');
+  await page.getByRole('checkbox', { name: 'Payments' }).check();
+  const assignmentResponse = page.waitForResponse(response => /\/api\/users\//.test(response.url()) && response.request().method() === 'PUT');
+  await page.getByRole('button', { name: 'Save user' }).click();
+  const assigned = await assignmentResponse;
+  expect(assigned.status()).toBe(200);
+  const assignedUser = await assigned.json();
+  expect(assignedUser.role).toBe('Portfolio Leader');
+  expect(assignedUser.portfolioAccess).toHaveLength(1);
+  await page.getByRole('button', { name: 'Edit E2E Admin User' }).click();
+  await expect(page.getByLabel('Role')).toHaveValue('Portfolio Leader');
+  await expect(page.getByRole('checkbox', { name: 'Payments' })).toBeChecked();
+  await page.getByRole('button', { name: 'Cancel' }).click();
   page.once('dialog', dialog => dialog.accept());
   await page.getByRole('button', { name: 'Deactivate E2E Admin User' }).click();
   await expect(page.getByText('User deactivated.')).toBeVisible();
@@ -29,5 +43,76 @@ test('administrator creates and deactivates an account and reviews its audit eve
   await page.getByRole('button', { name: 'Audit log' }).click();
   await page.getByLabel('Action').selectOption('delete');
   await expect(page.getByText('User deactivated', { exact: true })).toBeVisible();
+  const csvResponse = page.waitForResponse(response => response.url().includes('/audit-logs?') && response.url().includes('format=csv'));
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Export CSV' }).click();
+  expect((await csvResponse).status()).toBe(200);
+  expect((await downloadPromise).suggestedFilename()).toBe('audit-log.csv');
+  await expect(page.getByText('Audit page exported.')).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test('administrator edits a role description and observes the persisted policy', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+  await page.goto('/login');
+  await page.getByLabel('Email address').fill(process.env.E2E_EMAIL || 'admin@ketsip.local');
+  await page.getByLabel('Password').fill(process.env.E2E_NEW_PASSWORD || 'ChangedPassword456!');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await page.getByRole('link', { name: 'Administration' }).click();
+  await page.getByRole('button', { name: 'Roles' }).click();
+  await page.getByRole('button', { name: 'Edit Auditor' }).click();
+  const description = page.getByLabel('Description');
+  const original = await description.inputValue();
+  const updated = `E2E audit role ${Date.now()}`;
+  await description.fill(updated);
+  const savedResponse = page.waitForResponse(response => /\/api\/roles\//.test(response.url()) && response.request().method() === 'PUT');
+  await page.getByRole('button', { name: 'Save role' }).click();
+  expect((await savedResponse).status()).toBe(200);
+  await expect(page.getByText('Role saved.')).toBeVisible();
+  await page.getByRole('button', { name: 'Edit Auditor' }).click();
+  await expect(description).toHaveValue(updated);
+  await description.fill(original);
+  const restoreResponse = page.waitForResponse(response => /\/api\/roles\//.test(response.url()) && response.request().method() === 'PUT');
+  await page.getByRole('button', { name: 'Save role' }).click();
+  expect((await restoreResponse).status()).toBe(200);
+  await expect(page.getByText('Role saved.')).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test('administrator changes and restores a role permission', async ({ page, request }) => {
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+  await page.goto('/login');
+  await page.getByLabel('Email address').fill(process.env.E2E_EMAIL || 'admin@ketsip.local');
+  await page.getByLabel('Password').fill(process.env.E2E_NEW_PASSWORD || 'ChangedPassword456!');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await page.getByRole('link', { name: 'Administration' }).click();
+  const token = await page.evaluate(() => sessionStorage.getItem('ketsip.token'));
+  const headers = { Authorization: `Bearer ${token}` };
+  const rolesResponse = await request.get('/api/roles?limit=100', { headers });
+  expect(rolesResponse.status()).toBe(200);
+  const original = (await rolesResponse.json()).items.find((role: { name: string }) => role.name === 'Auditor');
+  expect(original).toBeTruthy();
+  try {
+    await page.getByRole('button', { name: 'Roles' }).click();
+    await page.getByRole('button', { name: 'Edit Auditor' }).click();
+    const exportPermission = page.getByRole('checkbox', { name: 'export' });
+    const originallyChecked = await exportPermission.isChecked();
+    if (originallyChecked) await exportPermission.uncheck(); else await exportPermission.check();
+    const changed = page.waitForResponse(response => response.url().includes(`/api/roles/${original.id}`) && response.request().method() === 'PUT');
+    await page.getByRole('button', { name: 'Save role' }).click();
+    const saved = await changed;
+    expect(saved.status()).toBe(200);
+    expect((await saved.json()).permissions.includes('export')).toBe(!originallyChecked);
+    await page.getByRole('button', { name: 'Edit Auditor' }).click();
+    if (originallyChecked) await expect(exportPermission).not.toBeChecked(); else await expect(exportPermission).toBeChecked();
+  } finally {
+    const restored = await request.put(`/api/roles/${original.id}`, { headers, data: { name: original.name, description: original.description, permissions: original.permissions } });
+    expect(restored.status()).toBe(200);
+    expect((await restored.json()).permissions).toEqual(original.permissions);
+  }
   expect(errors).toEqual([]);
 });

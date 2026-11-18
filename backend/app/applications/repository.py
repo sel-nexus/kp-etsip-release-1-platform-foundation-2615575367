@@ -4,8 +4,9 @@ import re
 from datetime import datetime, timezone
 from uuid import uuid4
 from bson import ObjectId
+from bson.errors import InvalidDocument
 from pymongo.asynchronous.database import AsyncDatabase
-from pymongo.errors import DuplicateKeyError
+from pymongo.errors import WriteError
 
 
 class ApplicationRepository:
@@ -42,7 +43,7 @@ class ApplicationRepository:
         if not ObjectId.is_valid(portfolio_id):
             return None
         token = uuid4().hex
-        result = await self.db.portfolios.update_one({"_id": ObjectId(portfolio_id)}, {"$addToSet": {"applicationReservations": token}})
+        result = await self.db.portfolios.update_one({"_id": ObjectId(portfolio_id), "deletionLock": {"$exists": False}}, {"$addToSet": {"applicationReservations": token}})
         return token if result.matched_count else None
 
     async def release(self, portfolio_id: str, token: str | None) -> None:
@@ -51,7 +52,11 @@ class ApplicationRepository:
             await self.db.portfolios.update_one({"_id": ObjectId(portfolio_id)}, {"$pull": {"applicationReservations": token}})
 
     async def insert(self, fields: dict) -> dict | None:
-        """Reserve the portfolio and persist an application."""
+        """Reserve the portfolio and persist an application.
+
+        Crashes or ambiguous outcomes may leave reservations requiring manual
+        reconciliation; do not release them when the write might have succeeded.
+        """
         token = await self.reserve(fields["portfolioId"])
         if not token:
             return None
@@ -59,7 +64,7 @@ class ApplicationRepository:
         row = {**fields, "reservation": token, "createdAt": now, "updatedAt": now}
         try:
             await self.db.applications.insert_one(row)
-        except DuplicateKeyError:
+        except (WriteError, InvalidDocument):
             await self.release(fields["portfolioId"], token)
             raise
         return row
@@ -72,7 +77,7 @@ class ApplicationRepository:
         query = {"_id": old["_id"], "portfolioId": old["portfolioId"], "reservation": old.get("reservation")}
         try:
             result = await self.db.applications.update_one(query, {"$set": {**fields, "reservation": token, "updatedAt": datetime.now(timezone.utc)}})
-        except DuplicateKeyError:
+        except (WriteError, InvalidDocument):
             await self.release(fields["portfolioId"], token)
             raise
         if not result.matched_count:

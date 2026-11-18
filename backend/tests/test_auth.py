@@ -1,6 +1,7 @@
 """Exercise identity behavior through HTTP and an isolated MongoDB."""
 
 import pytest
+from datetime import datetime, timedelta, timezone
 from jose import jwt
 from app.core.config import settings
 from app.core.seed import seed_database
@@ -40,7 +41,9 @@ async def test_seed_idempotence_login_and_audit(environment):
 async def test_password_first_login_and_persistence(environment):
     """Require password change, reject bad changes and persist valid changes."""
     client, db = environment
-    token = (await sign_in(client)).json()["token"]
+    login_response = await sign_in(client)
+    assert login_response.status_code == 200
+    token = login_response.json()["token"]
     headers = {"Authorization": f"Bearer {token}"}
     assert (await client.get("/api/auth/me", headers=headers)).status_code == 200
     assert (await client.put("/api/auth/profile", headers=headers, json={"defaultLandingPage": "applications"})).status_code == 403
@@ -50,7 +53,9 @@ async def test_password_first_login_and_persistence(environment):
     assert (await client.post("/api/auth/password", headers=headers, json={"currentPassword": "DemoPassword123!", "newPassword": "AnewPassword123!"})).status_code == 200
     assert (await client.get("/api/auth/me", headers=headers)).status_code == 401
     assert (await sign_in(client)).status_code == 401
-    token = (await sign_in(client, "AnewPassword123!")).json()["token"]
+    login_response = await sign_in(client, "AnewPassword123!")
+    assert login_response.status_code == 200
+    token = login_response.json()["token"]
     headers = {"Authorization": f"Bearer {token}"}
     result = await client.put("/api/auth/profile", headers=headers, json={"defaultLandingPage": "applications"})
     assert result.status_code == 200 and result.json()["defaultLandingPage"] == "applications"
@@ -59,7 +64,9 @@ async def test_password_first_login_and_persistence(environment):
     assert stored["mustChangePassword"] is False and stored["defaultLandingPage"] == "applications"
     assert await db.audit_logs.count_documents({"action": "edit", "details": "Password changed"}) == 1
     assert await db.audit_logs.count_documents({"action": "edit", "details": "Landing preference changed"}) == 1
-    assert (await client.get("/api/auth/me", headers=headers)).json()["defaultLandingPage"] == "applications"
+    checked_response_1 = await client.get("/api/auth/me", headers=headers)
+    assert checked_response_1.status_code == 200, checked_response_1.text
+    assert checked_response_1.json()["defaultLandingPage"] == "applications"
     assert (await client.post("/api/auth/logout", headers=headers)).status_code == 200
 
 
@@ -71,7 +78,49 @@ async def test_auth_boundaries_validation_and_inactive(environment):
         assert (await client.request(method, url)).status_code == 401
         assert (await client.request(method, url, headers={"Authorization": "Bearer invalid"})).status_code == 401
     assert (await client.post("/api/auth/login", json={"email": {"$ne": ""}, "password": "x"})).status_code == 422
-    token = (await sign_in(client)).json()["token"]
+    login_response = await sign_in(client)
+    assert login_response.status_code == 200
+    token = login_response.json()["token"]
     await db.users.update_one({"email": "admin@ketsip.local"}, {"$set": {"status": "Inactive"}})
     assert (await client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})).status_code == 401
     assert (await sign_in(client)).status_code == 401
+
+
+async def test_expired_signed_token_and_login_input_validation(environment):
+    client, db = environment
+    user = await db.users.find_one({"role": "Administrator"})
+    claims = {"sub": str(user["_id"]), "userId": str(user["_id"]), "role": user["role"],
+              "ver": user.get("tokenVersion", 0), "exp": datetime.now(timezone.utc) - timedelta(minutes=1)}
+    expired = jwt.encode(claims, settings.JWT_SECRET, algorithm="HS256")
+    response = await client.get("/api/auth/me", headers={"Authorization": f"Bearer {expired}"})
+    assert response.status_code == 401
+    assert response.headers["www-authenticate"] == "Bearer"
+    for body in ({"password": "x"}, {"email": "admin@ketsip.local"},
+                 {"email": "", "password": "x"}, {"email": "x" * 255, "password": "x"},
+                 {"email": "admin@ketsip.local", "password": {"$ne": ""}}):
+        assert (await client.post("/api/auth/login", json=body)).status_code == 422
+
+
+async def test_profile_and_password_required_types_and_boundaries(environment):
+    client, db = environment
+    login = await sign_in(client)
+    assert login.status_code == 200
+    headers = {"Authorization": "Bearer " + login.json()["token"]}
+    await db.users.update_one({"email": "admin@ketsip.local"}, {"$set": {"mustChangePassword": False}})
+    for body in ({}, {"defaultLandingPage": None}, {"defaultLandingPage": {}},
+                 {"defaultLandingPage": ""}, {"defaultLandingPage": "x" * 500},
+                 {"defaultLandingPage": "settings"}):
+        response = await client.put("/api/auth/profile", headers=headers, json=body)
+        assert response.status_code == 422, body
+    valid = {"currentPassword": "DemoPassword123!", "newPassword": "AnotherPassword123!"}
+    for body in ({}, {"newPassword": valid["newPassword"]}, {"currentPassword": valid["currentPassword"]},
+                 {**valid, "currentPassword": None}, {**valid, "currentPassword": {}},
+                 {**valid, "currentPassword": ""}, {**valid, "currentPassword": "x" * 257},
+                 {**valid, "newPassword": None}, {**valid, "newPassword": {}},
+                 {**valid, "newPassword": "x" * 11}, {**valid, "newPassword": "x" * 73},
+                 {**valid, "newPassword": "é" * 37}):
+        response = await client.post("/api/auth/password", headers=headers, json=body)
+        assert response.status_code == 422, body
+    user = await db.users.find_one({"email": "admin@ketsip.local"})
+    assert user["defaultLandingPage"] is None
+    assert (await sign_in(client)).status_code == 200

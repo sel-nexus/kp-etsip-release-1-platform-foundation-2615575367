@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
 
 test('administrator creates, edits, filters and deletes an application', async ({ page }) => {
   const errors: string[] = [];
@@ -22,6 +23,16 @@ test('administrator creates, edits, filters and deletes an application', async (
   await expect(page.getByText('Updated owner')).toBeVisible();
   await page.getByRole('link', { name: 'All applications' }).click();
   await page.getByLabel('Search').fill(name);
+  await expect(page.getByRole('link', { name, exact: true })).toBeVisible();
+  const csvResponse = page.waitForResponse(response => response.url().includes('/api/applications/export?') && response.request().method() === 'GET');
+  const download = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Export CSV' }).click();
+  const csv = await csvResponse;
+  expect(csv.status()).toBe(200);
+  expect(new URL(csv.url()).searchParams.get('search')).toBe(name);
+  const file = await download;
+  expect(file.suggestedFilename()).toBe('applications.csv');
+  expect(await readFile(await file.path(), 'utf8')).toContain(name);
   await page.getByRole('link', { name }).click();
   page.once('dialog', dialog => dialog.accept());
   await page.getByRole('button', { name: 'Delete application' }).click();

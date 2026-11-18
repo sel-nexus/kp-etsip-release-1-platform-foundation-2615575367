@@ -12,16 +12,17 @@ const app = { id: 'a', name: 'Checkout', portfolioId: 'p', portfolioName: 'Payme
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
-it('renders records and sends filters while hiding read-only actions', async () => {
-  const fetcher = vi.spyOn(globalThis, 'fetch').mockImplementation(async url => String(url).includes('/portfolios') ? json({ items: [{ id: 'p', name: 'Payments' }] }) : json({ items: [app], total: 1, offset: 0, limit: 25 }));
+it('filters records and hides read-only actions', async () => {
+  const fetcher = vi.spyOn(globalThis, 'fetch').mockImplementation(async url => String(url).includes('/portfolios') ? json({ items: [{ id: 'p', name: 'Payments' }] }) : json({ items: String(url).includes('criticality=High') ? [] : [app], total: String(url).includes('criticality=High') ? 0 : 1, offset: 0, limit: 25 }));
   render(<MemoryRouter><Applications user={{ ...admin, role: 'Read Only' }} /></MemoryRouter>);
   expect(await screen.findByRole('link', { name: 'Checkout' })).toHaveAttribute('href', '/applications/a');
   expect(screen.queryByText('Export CSV')).not.toBeInTheDocument();
   await userEvent.setup().selectOptions(screen.getByLabelText('Criticality'), 'High');
   expect(fetcher.mock.calls.some(([url]) => String(url).includes('criticality=High'))).toBe(true);
+  expect(await screen.findByText('No applications match these filters.')).toBeInTheDocument();
 });
 
-it('edits all application fields and displays errors', async () => {
+it('shows existing coverage in the edit form and displays save errors', async () => {
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, opts) => {
     if (opts?.method === 'PUT') return json({ detail: 'Duplicate name' }, 409);
     return String(url).includes('/portfolios') ? json({ items: [{ id: 'p', name: 'Payments' }] }) : json(app);

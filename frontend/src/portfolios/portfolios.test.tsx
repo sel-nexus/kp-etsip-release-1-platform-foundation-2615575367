@@ -13,9 +13,11 @@ const json = (data: unknown, status = 200) => new Response(JSON.stringify(data),
 afterEach(() => { cleanup(); vi.restoreAllMocks(); sessionStorage.clear(); });
 
 it('filters the inventory and creates a complete portfolio', async () => {
+  let created = false;
   const fetcher = vi.spyOn(globalThis, 'fetch').mockImplementation(async (_url, options) => {
-    if (options?.method === 'POST') return json(portfolio, 201);
-    return json({ items: [portfolio], total: 1, offset: 0, limit: 25 });
+    if (options?.method === 'POST') { created = true; return json({ ...portfolio, name: 'Payments New' }, 201); }
+    const items = created ? [portfolio, { ...portfolio, id: 'p2', name: 'Payments New' }] : [portfolio];
+    return json({ items, total: items.length, offset: 0, limit: 25 });
   });
   render(<MemoryRouter><Portfolios user={admin} /></MemoryRouter>);
   expect(await screen.findByRole('link', { name: 'Payments' })).toBeInTheDocument();
@@ -23,13 +25,14 @@ it('filters the inventory and creates a complete portfolio', async () => {
   await actor.type(screen.getByLabelText('Search'), 'Pay');
   expect(fetcher.mock.calls.some(([url]) => String(url).includes('search=Pay'))).toBe(true);
   await actor.click(screen.getByRole('button', { name: 'Create portfolio' }));
-  await actor.type(screen.getByLabelText('Name *'), 'Payments');
+  await actor.type(screen.getByLabelText('Name *'), 'Payments New');
   await actor.type(screen.getByLabelText('Owner'), 'Alex');
   await actor.type(screen.getByLabelText('Product area'), 'Commerce');
   await actor.type(screen.getByLabelText('Description'), 'Payment services');
   await actor.click(screen.getByRole('button', { name: 'Save portfolio' }));
   expect(fetcher.mock.calls.some(([, options]) => options?.method === 'POST' && JSON.parse(String(options.body)).description === 'Payment services')).toBe(true);
   expect(await screen.findByRole('button', { name: 'Create portfolio' })).toBeInTheDocument();
+  expect(await screen.findByRole('link', { name: 'Payments New' })).toBeInTheDocument();
 });
 
 it('shows linked applications, permits editing, and displays deletion conflicts', async () => {

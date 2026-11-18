@@ -33,13 +33,19 @@ async def test_dashboard_formulas_rounding_filters_and_empty(environment):
     assert {k: data[k] for k in ('enterpriseQualityScore', 'applicationHealthScore', 'automationMaturityScore', 'openCriticalDefects', 'applicationsAtRisk', 'totalApplications', 'totalPortfolios')} == {
         'enterpriseQualityScore': 81, 'applicationHealthScore': 62, 'automationMaturityScore': 71, 'openCriticalDefects': 5, 'applicationsAtRisk': 1, 'totalApplications': 2, 'totalPortfolios': 1}
     assert data['portfolios'][0]['qualityScore'] == 81
-    filtered = (await client.get('/api/dashboard/executive', headers=admin, params={'productArea': 'Commerce', 'riskLevel': 'High'})).json()
+    checked_response_1 = await client.get('/api/dashboard/executive', headers=admin, params={'productArea': 'Commerce', 'riskLevel': 'High'})
+    assert checked_response_1.status_code == 200, checked_response_1.text
+    filtered = checked_response_1.json()
     assert filtered['totalPortfolios'] == 1 and filtered['totalApplications'] == 1 and filtered['enterpriseQualityScore'] == 80
-    empty = (await client.get('/api/dashboard/executive', headers=admin, params={'productArea': 'missing'})).json()
+    checked_response_2 = await client.get('/api/dashboard/executive', headers=admin, params={'productArea': 'missing'})
+    assert checked_response_2.status_code == 200, checked_response_2.text
+    empty = checked_response_2.json()
     assert empty['enterpriseQualityScore'] is None and empty['applicationHealthScore'] is None and empty['automationMaturityScore'] is None
     assert empty['totalPortfolios'] == empty['totalApplications'] == 0
     await db.applications.delete_many({})
-    empty = (await client.get('/api/dashboard/executive', headers=admin)).json()
+    checked_response_3 = await client.get('/api/dashboard/executive', headers=admin)
+    assert checked_response_3.status_code == 200, checked_response_3.text
+    empty = checked_response_3.json()
     assert empty['totalPortfolios'] == 3 and empty['enterpriseQualityScore'] is None
     assert all(p['qualityScore'] is None and p['applicationCount'] == 0 for p in empty['portfolios'])
 
@@ -52,15 +58,24 @@ async def test_permissions_scope_password_gate_and_filter_validation(environment
     assert (await client.get('/api/reports/applications?format=csv', headers=gated)).status_code == 403
     first, second = [str(p['_id']) for p in await db.portfolios.find().sort('name', 1).limit(2).to_list(None)]
     leader = await credentials(db, 'Portfolio Leader', [first])
-    data = (await client.get('/api/dashboard/executive', headers=leader)).json()
+    checked_response_4 = await client.get('/api/dashboard/executive', headers=leader)
+    assert checked_response_4.status_code == 200, checked_response_4.text
+    data = checked_response_4.json()
     assert data['totalPortfolios'] == 1 and data['portfolios'][0]['id'] == first
     visible_export = await client.get('/api/reports/applications', headers=leader, params={'format': 'csv'})
+    assert visible_export.status_code == 200
     visible_rows = list(csv.DictReader(io.StringIO(visible_export.text)))
     assert visible_rows and all(row['portfolioName'] == data['portfolios'][0]['name'] for row in visible_rows)
-    assert (await client.get('/api/reports/applications', headers=leader, params={'portfolioId': second})).json()['total'] == 0
-    assert (await client.get('/api/reports/portfolios', headers=leader, params={'portfolioId': second, 'format': 'csv'})).text.count('\n') == 1
+    checked_response_5 = await client.get('/api/reports/applications', headers=leader, params={'portfolioId': second})
+    assert checked_response_5.status_code == 200, checked_response_5.text
+    assert checked_response_5.json()['total'] == 0
+    checked_response_6 = await client.get('/api/reports/portfolios', headers=leader, params={'portfolioId': second, 'format': 'csv'})
+    assert checked_response_6.status_code == 200, checked_response_6.text
+    assert checked_response_6.text.count('\n') == 1
     leader = await credentials(db, 'Portfolio Leader', [])
-    assert (await client.get('/api/dashboard/executive', headers=leader)).json()['totalPortfolios'] == 0
+    checked_response_7 = await client.get('/api/dashboard/executive', headers=leader)
+    assert checked_response_7.status_code == 200, checked_response_7.text
+    assert checked_response_7.json()['totalPortfolios'] == 0
     readonly = await credentials(db, 'Read Only')
     count_before_denials = await db.audit_logs.count_documents({'action': 'export'})
     assert (await client.get('/api/reports/applications?format=csv', headers=readonly)).status_code == 403
@@ -95,6 +110,17 @@ async def test_complete_csv_safe_cells_audit_and_pagination(environment):
     assert any(r['name'] == "'\t@danger" for r in rows) and all(r['name'] != 'Excluded' for r in rows)
     response = await client.get('/api/reports/portfolios', headers=admin, params={**params, 'format': 'csv'})
     rows = list(csv.DictReader(io.StringIO(response.text)))
+    assert response.status_code == 200
     assert len(rows) == 1 and rows[0]['owner'] == "'  =SUM(1,1)" and rows[0]['applicationCount'] == '106'
     events = await db.audit_logs.find({'action': 'export'}).to_list(None)
     assert len(events) == 2 and {event['entityType'] for event in events} == {'application', 'portfolio'}
+
+
+async def test_insights_reject_invalid_filter_and_anonymous_requests(environment):
+    client, db = environment
+    admin = await credentials(db)
+    for path in ('/api/dashboard/executive', '/api/reports/applications', '/api/reports/portfolios'):
+        assert (await client.get(path)).status_code == 401
+        assert (await client.get(path, headers=admin, params={'riskLevel': 'Invalid'})).status_code == 422
+    for path in ('/api/reports/applications', '/api/reports/portfolios'):
+        assert (await client.get(path, headers=admin, params={'format': 'xml'})).status_code == 422

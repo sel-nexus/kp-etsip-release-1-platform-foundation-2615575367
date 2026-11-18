@@ -53,13 +53,13 @@ async def save(repo: PortfolioRepository, user: dict, payload: PortfolioInput, i
 
 
 async def remove(repo: PortfolioRepository, user: dict, identifier: str) -> None:
-    """Reject nonempty portfolios and audit a successful deletion."""
+    """Reject referenced portfolios and audit a successful deletion."""
     row = await find(repo, user, identifier, "delete")
     _, total = await repo.applications(identifier, 0, 1)
     if total:
         raise HTTPException(status_code=409, detail="Cannot delete a portfolio containing applications")
     if not await repo.delete(identifier):
         if await repo.get(identifier):
-            raise HTTPException(status_code=409, detail="Portfolio has application references or pending changes")
+            raise HTTPException(status_code=409, detail="Portfolio has references or pending changes")
         raise HTTPException(status_code=404, detail="Portfolio not found")
     await repo.audit(user, "delete", identifier, row["name"])

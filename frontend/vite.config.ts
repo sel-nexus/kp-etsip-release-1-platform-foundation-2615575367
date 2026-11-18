@@ -16,6 +16,6 @@ export default defineConfig(({ mode }) => {
       } },
     }), autoprefixer()] } },
     server: { port: 5173, proxy: { '/api': env.VITE_PROXY_TARGET || 'http://localhost:8000' } },
-    test: { environment: 'jsdom', include: ['src/**/*.test.tsx'] },
+    test: { environment: 'jsdom', include: ['src/**/*.test.{ts,tsx}'] },
   };
 });

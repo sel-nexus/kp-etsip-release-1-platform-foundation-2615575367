@@ -3,8 +3,12 @@
 import re
 from datetime import datetime, timezone
 from bson import ObjectId
+from bson.errors import InvalidDocument
+from fastapi import HTTPException
 from pymongo import ReturnDocument
 from pymongo.asynchronous.database import AsyncDatabase
+from pymongo.errors import WriteError
+from app.applications.repository import ApplicationRepository
 
 
 class AdminRepository:
@@ -36,7 +40,13 @@ class AdminRepository:
         """Insert a timestamped document."""
         now = datetime.now(timezone.utc)
         row = {**fields, 'createdAt': now, 'updatedAt': now}
-        await self.db[collection].insert_one(row)
+        reservations = await self.reserve_assignments(fields.get('portfolioAccess', [])) if collection == 'users' else []
+        try:
+            await self.db[collection].insert_one(row)
+        except (WriteError, InvalidDocument):
+            await self.release_assignments(reservations)
+            raise
+        await self.release_assignments(reservations)
         return row
 
     async def update(self, collection: str, identifier: str, fields: dict, invalidate: bool = False) -> dict | None:
@@ -46,7 +56,39 @@ class AdminRepository:
         update = {'$set': {**fields, 'updatedAt': datetime.now(timezone.utc)}}
         if invalidate:
             update['$inc'] = {'tokenVersion': 1}
-        return await self.db[collection].find_one_and_update({'_id': ObjectId(identifier)}, update, return_document=ReturnDocument.AFTER)
+        reservations = await self.reserve_assignments(fields.get('portfolioAccess', [])) if collection == 'users' else []
+        try:
+            row = await self.db[collection].find_one_and_update({'_id': ObjectId(identifier)}, update, return_document=ReturnDocument.AFTER)
+        except (WriteError, InvalidDocument):
+            await self.release_assignments(reservations)
+            raise
+        await self.release_assignments(reservations)
+        return row
+
+    async def reserve_assignments(self, identifiers: list[str]) -> list[tuple[str, str]]:
+        """Protect new assignments while their user document is written.
+
+        Crashes and uncertain writes may leave reservations requiring manual
+        reconciliation. Releasing them without confirming the outcome is unsafe.
+        """
+        repo = ApplicationRepository(self.db)
+        reservations: list[tuple[str, str]] = []
+        try:
+            for identifier in identifiers:
+                token = await repo.reserve(identifier)
+                if token is None:
+                    raise HTTPException(422, 'Invalid portfolio assignment')
+                reservations.append((identifier, token))
+        except Exception:
+            await self.release_assignments(reservations)
+            raise
+        return reservations
+
+    async def release_assignments(self, reservations: list[tuple[str, str]]) -> None:
+        """Release known completed or aborted assignment reservations."""
+        repo = ApplicationRepository(self.db)
+        for identifier, token in reservations:
+            await repo.release(identifier, token)
 
     async def valid_portfolios(self, identifiers: list[str]) -> bool:
         """Verify every assignment points to an existing portfolio."""

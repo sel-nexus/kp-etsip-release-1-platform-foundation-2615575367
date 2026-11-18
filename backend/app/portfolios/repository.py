@@ -2,6 +2,7 @@
 
 import re
 from datetime import datetime, timezone
+from uuid import uuid4
 from bson import ObjectId
 from pymongo.asynchronous.database import AsyncDatabase
 
@@ -40,7 +41,7 @@ class PortfolioRepository:
         result = await cursor.to_list(None)
         metrics = result[0] if result else {"count": 0, "average": None}
         average = metrics["average"]
-        return {**{key: value for key, value in document.items() if key not in ("_id", "applicationReservations")}, "id": identifier, "applicationCount": metrics["count"],
+        return {**{key: value for key, value in document.items() if key not in ("_id", "applicationReservations", "deletionLock")}, "id": identifier, "applicationCount": metrics["count"],
                 "qualityScore": int(average + 0.5) if average is not None else None}
 
     async def insert(self, fields: dict) -> dict:
@@ -57,9 +58,31 @@ class PortfolioRepository:
         return await self.get(identifier)
 
     async def delete(self, identifier: str) -> bool:
-        """Delete an existing portfolio document."""
-        result = await self.db.portfolios.delete_one({"_id": ObjectId(identifier), "$or": [
-            {"applicationReservations": {"$exists": False}}, {"applicationReservations": {"$size": 0}}]})
+        """Lock against new references, check all references, and delete.
+
+        A crash or ambiguous lock write can leave the lock behind. An operator
+        must reconcile it before clearing it; automatic expiry is unsafe.
+        """
+        token = uuid4().hex
+        query = {"_id": ObjectId(identifier), "deletionLock": {"$exists": False}, "$or": [
+            {"applicationReservations": {"$exists": False}}, {"applicationReservations": {"$size": 0}}]}
+        locked = await self.db.portfolios.update_one(query, {"$set": {"deletionLock": token}})
+        if not locked.matched_count:
+            return False
+        try:
+            reference = {"$regex": f"^{re.escape(identifier)}$", "$options": "i"}
+            referenced = (await self.db.users.find_one({"portfolioAccess": reference}, {"_id": 1}) or
+                          await self.db.applications.find_one({"portfolioId": reference}, {"_id": 1}))
+        except Exception:
+            await self.db.portfolios.update_one({"_id": ObjectId(identifier), "deletionLock": token}, {"$unset": {"deletionLock": ""}})
+            raise
+        if referenced:
+            await self.db.portfolios.update_one({"_id": ObjectId(identifier), "deletionLock": token}, {"$unset": {"deletionLock": ""}})
+            return False
+        # An uncertain delete may still be in flight. Keep the lock in that case.
+        result = await self.db.portfolios.delete_one({"_id": ObjectId(identifier), "deletionLock": token})
+        if not result.deleted_count:
+            await self.db.portfolios.update_one({"_id": ObjectId(identifier), "deletionLock": token}, {"$unset": {"deletionLock": ""}})
         return result.deleted_count == 1
 
     async def applications(self, identifier: str, offset: int, limit: int) -> tuple[list[dict], int]:

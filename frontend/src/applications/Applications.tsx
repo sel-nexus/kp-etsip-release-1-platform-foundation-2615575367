@@ -17,7 +17,7 @@ export default function Applications({ user }: { user: User }) {
     setLoading(true); setError('');
     request<Page<Application>>(`/applications${query ? `?${query}` : ''}`)
       .then(result => { if (active) setPage(result); })
-      .catch(e => { if (active) setError(e.message); })
+      .catch(e => { if (active) { setPage(null); setError(e.message); } })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [query, revision]);

@@ -13,7 +13,7 @@ test('administrator creates, edits, searches and deletes an empty portfolio', as
   await page.getByRole('button', { name: 'Create portfolio' }).click();
   await page.getByLabel('Name *').fill(name);
   await page.getByLabel('Owner').fill('Portfolio owner');
-  await page.getByLabel('Product area').fill('Quality');
+  await page.getByLabel('Product area', { exact: true }).fill('Quality');
   await page.getByLabel('Description').fill('Created by the portfolio journey');
   await page.getByRole('button', { name: 'Save portfolio' }).click();
   await page.getByLabel('Search').fill(name);
