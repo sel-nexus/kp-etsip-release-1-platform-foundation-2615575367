@@ -9,6 +9,7 @@ __pycache__/
 coverage/
 .env
 .env.local
+.env.prod
 .env.*.local
 PLAN.md
 todos.yaml
