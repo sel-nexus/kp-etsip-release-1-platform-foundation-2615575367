@@ -4,6 +4,8 @@ import { api, getToken, setToken } from './api';
 import type { User } from './types';
 import Login from './auth/Login';
 import Profile from './auth/Profile';
+import Portfolios from './portfolios/Portfolios';
+import PortfolioDetail from './portfolios/PortfolioDetail';
 
 /** Coordinate the persisted session and identity routes. */
 function AppRoutes() {
@@ -33,7 +35,7 @@ function AppRoutes() {
       <a className="skip" href="#main">Skip to content</a>
       <header className="header">
         <Link to="/" className="brand"><span className="brand-mark">K</span><span>KP ETSIP <small>PLATFORM FOUNDATION</small></span></Link>
-        {user && <nav aria-label="Account navigation"><Link to="/profile">My Profile</Link><button className="text-button" onClick={signOut}>Sign out</button></nav>}
+        {user && <nav aria-label="Account navigation">{!user.mustChangePassword && <Link to="/portfolios">Portfolios</Link>}<Link to="/profile">My Profile</Link><button className="text-button" onClick={signOut}>Sign out</button></nav>}
       </header>
       {notice && <p className="session-notice" role="status">{notice}</p>}
       <Routes>
@@ -41,6 +43,8 @@ function AppRoutes() {
         <Route path="/profile" element={user ? <Profile user={user} onUpdate={setUser} onPasswordChanged={() => { setToken(null); setUser(null); setNotice('Password changed. Please sign in again.'); navigate('/login'); }} /> : <Navigate to="/login" replace />} />
         <Route path="/dashboard" element={user ? user.mustChangePassword ? <Navigate to="/profile" replace /> : <main id="main" className="content"><h1>Executive Dashboard</h1><p>This area is not yet available in the identity release.</p><Link to="/profile">Manage your profile</Link></main> : <Navigate to="/login" replace />} />
         <Route path="/applications" element={user ? user.mustChangePassword ? <Navigate to="/profile" replace /> : <main id="main" className="content"><h1>Application Repository</h1><p>This area is not yet available in the identity release.</p><Link to="/profile">Manage your profile</Link></main> : <Navigate to="/login" replace />} />
+        <Route path="/portfolios" element={user ? user.mustChangePassword ? <Navigate to="/profile" replace /> : <Portfolios user={user} /> : <Navigate to="/login" replace />} />
+        <Route path="/portfolios/:id" element={user ? user.mustChangePassword ? <Navigate to="/profile" replace /> : <PortfolioDetail user={user} /> : <Navigate to="/login" replace />} />
         <Route path="*" element={<Navigate to={user ? user.mustChangePassword ? '/profile' : `/${user.defaultLandingPage || (['Administrator', 'Executive'].includes(user.role) ? 'dashboard' : 'applications')}` : '/login'} replace />} />
       </Routes>
     </>

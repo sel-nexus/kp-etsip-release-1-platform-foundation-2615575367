@@ -1,0 +1,33 @@
+import { test, expect } from '@playwright/test';
+
+test('administrator creates, edits, searches and deletes an empty portfolio', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+  const name = `Portfolio E2E ${Date.now()}`;
+  await page.goto('/login');
+  await page.getByLabel('Email address').fill(process.env.E2E_EMAIL || 'admin@ketsip.local');
+  await page.getByLabel('Password').fill(process.env.E2E_NEW_PASSWORD || 'ChangedPassword456!');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await page.getByRole('link', { name: 'Portfolios' }).click();
+  await page.getByRole('button', { name: 'Create portfolio' }).click();
+  await page.getByLabel('Name *').fill(name);
+  await page.getByLabel('Owner').fill('Portfolio owner');
+  await page.getByLabel('Product area').fill('Quality');
+  await page.getByLabel('Description').fill('Created by the portfolio journey');
+  await page.getByRole('button', { name: 'Save portfolio' }).click();
+  await page.getByLabel('Search').fill(name);
+  await page.getByRole('link', { name }).click();
+  await expect(page.getByText('Created by the portfolio journey')).toBeVisible();
+  await expect(page.getByText('No applications are linked to this portfolio.')).toBeVisible();
+  await page.getByRole('button', { name: 'Edit portfolio' }).click();
+  await page.getByLabel('Owner').fill('Updated owner');
+  await page.getByRole('button', { name: 'Save portfolio' }).click();
+  await expect(page.getByText('Updated owner')).toBeVisible();
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: 'Delete portfolio' }).click();
+  await expect(page.getByRole('heading', { name: 'Portfolios' })).toBeVisible();
+  await page.getByLabel('Search').fill(name);
+  await expect(page.getByText('No portfolios match these filters.')).toBeVisible();
+  expect(errors).toEqual([]);
+});

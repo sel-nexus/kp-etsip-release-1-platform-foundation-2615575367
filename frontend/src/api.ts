@@ -12,7 +12,7 @@ export function setToken(token: string | null): void {
 }
 
 /** Request JSON and clear invalid sessions outside the login exchange. */
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+export async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getToken();
   const response = await fetch(`${base}${path}`, {
     ...options,
@@ -26,6 +26,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     const body: { detail?: unknown } = await response.json().catch(() => ({}));
     throw new Error(typeof body.detail === 'string' ? body.detail : 'Unable to complete request.');
   }
+  if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
 }
 
