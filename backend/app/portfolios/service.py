@@ -59,5 +59,7 @@ async def remove(repo: PortfolioRepository, user: dict, identifier: str) -> None
     if total:
         raise HTTPException(status_code=409, detail="Cannot delete a portfolio containing applications")
     if not await repo.delete(identifier):
+        if await repo.get(identifier):
+            raise HTTPException(status_code=409, detail="Portfolio has application references or pending changes")
         raise HTTPException(status_code=404, detail="Portfolio not found")
     await repo.audit(user, "delete", identifier, row["name"])

@@ -1,0 +1,30 @@
+import { test, expect } from '@playwright/test';
+
+test('administrator creates, edits, filters and deletes an application', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+  const name = `Application E2E ${Date.now()}`;
+  await page.goto('/login');
+  await page.getByLabel('Email address').fill(process.env.E2E_EMAIL || 'admin@ketsip.local');
+  await page.getByLabel('Password').fill(process.env.E2E_NEW_PASSWORD || 'ChangedPassword456!');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await page.getByRole('link', { name: 'Applications', exact: true }).click();
+  await page.getByRole('link', { name: 'Create application' }).click();
+  await page.getByLabel('Name *').fill(name);
+  await page.getByLabel('Portfolio *').selectOption({ label: 'Payments' });
+  await page.getByLabel('Business owner').fill('Journey owner');
+  await page.getByRole('button', { name: 'Save application' }).click();
+  await expect(page.getByText('Journey owner')).toBeVisible();
+  await page.getByRole('button', { name: 'Edit application' }).click();
+  await page.getByLabel('Business owner').fill('Updated owner');
+  await page.getByRole('button', { name: 'Save application' }).click();
+  await expect(page.getByText('Updated owner')).toBeVisible();
+  await page.getByRole('link', { name: 'All applications' }).click();
+  await page.getByLabel('Search').fill(name);
+  await page.getByRole('link', { name }).click();
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: 'Delete application' }).click();
+  await expect(page.getByRole('heading', { name: 'Application Repository' })).toBeVisible();
+  expect(errors).toEqual([]);
+});

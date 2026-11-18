@@ -9,6 +9,7 @@ from app.core.config import settings
 from app.core.database import create_indexes
 from app.core.seed import seed_database
 from app.portfolios.router import router as portfolios_router
+from app.applications.router import router as applications_router
 
 
 @asynccontextmanager
@@ -32,6 +33,7 @@ app.add_middleware(CORSMiddleware, allow_origins=[v.strip() for v in settings.CO
                    allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 app.include_router(router)
 app.include_router(portfolios_router)
+app.include_router(applications_router)
 
 
 @app.get("/api/health", tags=["health"])

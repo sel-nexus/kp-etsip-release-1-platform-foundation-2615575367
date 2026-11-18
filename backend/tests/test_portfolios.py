@@ -1,11 +1,20 @@
 """Exercise portfolio authorization and persistence against real MongoDB."""
 
 import pytest
+import pytest_asyncio
 from bson import ObjectId
 from app.core.security import create_access_token
 
 pytestmark = pytest.mark.asyncio
 BASE = "/api/portfolios"
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def empty_inventory(environment):
+    """Isolate portfolio tests from the demonstration inventory."""
+    _, db = environment
+    await db.applications.delete_many({})
+    await db.portfolios.delete_many({})
 
 
 async def credentials(db, role="Administrator", access=None, ready=True):

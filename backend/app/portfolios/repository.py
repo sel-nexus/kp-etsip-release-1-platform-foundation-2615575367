@@ -40,7 +40,7 @@ class PortfolioRepository:
         result = await cursor.to_list(None)
         metrics = result[0] if result else {"count": 0, "average": None}
         average = metrics["average"]
-        return {**{key: value for key, value in document.items() if key != "_id"}, "id": identifier, "applicationCount": metrics["count"],
+        return {**{key: value for key, value in document.items() if key not in ("_id", "applicationReservations")}, "id": identifier, "applicationCount": metrics["count"],
                 "qualityScore": int(average + 0.5) if average is not None else None}
 
     async def insert(self, fields: dict) -> dict:
@@ -58,7 +58,8 @@ class PortfolioRepository:
 
     async def delete(self, identifier: str) -> bool:
         """Delete an existing portfolio document."""
-        result = await self.db.portfolios.delete_one({"_id": ObjectId(identifier)})
+        result = await self.db.portfolios.delete_one({"_id": ObjectId(identifier), "$or": [
+            {"applicationReservations": {"$exists": False}}, {"applicationReservations": {"$size": 0}}]})
         return result.deleted_count == 1
 
     async def applications(self, identifier: str, offset: int, limit: int) -> tuple[list[dict], int]:

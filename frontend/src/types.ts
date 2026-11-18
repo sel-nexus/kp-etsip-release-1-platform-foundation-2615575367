@@ -12,3 +12,17 @@ export interface User {
 
 /** The login exchange returns a bearer token and public identity. */
 export interface LoginResponse { token: string; user: User }
+
+/** Editable application inventory attributes. */
+export interface ApplicationFields {
+  name: string; description: string; portfolioId: string; productArea: string;
+  businessOwner: string; technologyOwner: string; etsOwner: string;
+  criticality: 'Low' | 'Medium' | 'High' | 'Critical'; tier: number;
+  lifecycleStatus: 'Active' | 'Deprecated' | 'Retired'; technologyStack: string;
+  repositoryLink: string | null; pipelineLink: string | null;
+  applicationHealthScore: number; qualityScore: number; automationCoverage: number;
+  unitTestCoverage: number; openDefects: number; openCriticalDefects: number;
+  riskLevel: 'Low' | 'Medium' | 'High';
+}
+export interface Application extends ApplicationFields { id: string; portfolioName: string; createdAt: string; updatedAt: string }
+export interface Page<T> { items: T[]; total: number; offset: number; limit: number }
