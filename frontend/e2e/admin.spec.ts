@@ -1,0 +1,33 @@
+import { test, expect } from '@playwright/test';
+
+test('administrator creates and deactivates an account and reviews its audit events', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+  const email = process.env.E2E_EMAIL || 'admin@ketsip.local';
+  const password = process.env.E2E_NEW_PASSWORD || 'ChangedPassword456!';
+  const person = `e2e-${Date.now()}@example.com`;
+  await page.goto('/login');
+  await page.getByLabel('Email address').fill(email);
+  await page.getByLabel('Password').fill(password);
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await page.getByRole('link', { name: 'Administration' }).click();
+  await page.getByRole('button', { name: 'Users' }).click();
+  await page.getByRole('button', { name: 'Create user' }).click();
+  await page.getByLabel('Name', { exact: true }).fill('E2E Admin User');
+  await page.getByLabel('Email', { exact: true }).fill(person);
+  await page.getByLabel('Initial password').fill('InitialPassword123!');
+  await page.getByLabel('Role').selectOption('Engineer');
+  await page.getByRole('button', { name: 'Save user' }).click();
+  await expect(page.getByText('User saved.')).toBeVisible();
+  await page.getByLabel('Search users').fill(person);
+  await expect(page.getByText(person)).toBeVisible();
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: 'Deactivate E2E Admin User' }).click();
+  await expect(page.getByText('User deactivated.')).toBeVisible();
+  await expect(page.getByText('Inactive')).toBeVisible();
+  await page.getByRole('button', { name: 'Audit log' }).click();
+  await page.getByLabel('Action').selectOption('delete');
+  await expect(page.getByText('User deactivated', { exact: true })).toBeVisible();
+  expect(errors).toEqual([]);
+});

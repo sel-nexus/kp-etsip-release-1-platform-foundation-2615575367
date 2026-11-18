@@ -26,3 +26,7 @@ export interface ApplicationFields {
 }
 export interface Application extends ApplicationFields { id: string; portfolioName: string; createdAt: string; updatedAt: string }
 export interface Page<T> { items: T[]; total: number; offset: number; limit: number }
+
+export interface AdminUser extends User { managerName: string | null; vendorIndicator: boolean; lastLogin: string | null }
+export interface AdminRole { id: string; name: string; description: string; permissions: string[] }
+export interface AuditEvent { id: string; timestamp: string; userId: string | null; userName: string; action: string; entityType: string; entityId: string | null; details: string }

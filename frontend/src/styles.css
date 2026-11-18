@@ -92,3 +92,8 @@ dt { color: var(--on-surface-variant); } dd { margin: 0; overflow-wrap: anywhere
 .portfolio-form { max-width: 680px; margin: 24px 0; }
 .portfolio-form textarea { font: inherit; width: 100%; min-height: 110px; border: 1px solid var(--outline); border-radius: 4px; padding: 10px 12px; resize: vertical; }
 .portfolio-form textarea:focus-visible { outline: 3px solid var(--primary); outline-offset: 3px; }
+.admin-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 24px 0; }
+.admin-check { display: flex; align-items: center; gap: 8px; font-weight: 400; }
+.admin-check input { width: auto; min-height: auto; }
+fieldset { border: 1px solid var(--card-border); padding: 16px; margin: 16px 0; }
+.portfolio-table td button + button { margin-left: 8px; }

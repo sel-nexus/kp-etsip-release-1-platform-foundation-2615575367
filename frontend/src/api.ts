@@ -31,17 +31,17 @@ export async function request<T>(path: string, options: RequestInit = {}): Promi
 }
 
 /** Download authenticated CSV without exposing the bearer token in a URL. */
-export async function downloadCsv(path: string): Promise<void> {
+export async function downloadCsv(path: string, filename = 'applications.csv'): Promise<void> {
   const token = getToken();
   const response = await fetch(`${base}${path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
   if (!response.ok) {
     if (response.status === 401) { setToken(null); window.dispatchEvent(new Event('session-expired')); }
     const body: { detail?: unknown } = await response.json().catch(() => ({}));
-    throw new Error(typeof body.detail === 'string' ? body.detail : 'Unable to export applications.');
+    throw new Error(typeof body.detail === 'string' ? body.detail : 'Unable to export CSV.');
   }
   const url = URL.createObjectURL(await response.blob());
   const link = document.createElement('a');
-  link.href = url; link.download = 'applications.csv'; link.click(); URL.revokeObjectURL(url);
+  link.href = url; link.download = filename; link.click(); URL.revokeObjectURL(url);
 }
 
 /** Provide typed calls for the identity API. */
