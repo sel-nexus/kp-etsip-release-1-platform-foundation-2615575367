@@ -1,0 +1,32 @@
+import { test, expect } from '@playwright/test';
+
+test('local identity forces password change and persists profile preference', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+  const email = process.env.E2E_EMAIL || 'admin@ketsip.local';
+  const initial = process.env.E2E_INITIAL_PASSWORD || 'DemoPassword123!';
+  const replacement = process.env.E2E_NEW_PASSWORD || 'ChangedPassword456!';
+  await page.goto('/');
+  await page.getByLabel('Email address').fill(email);
+  await page.getByLabel('Password').fill(initial);
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByText(email)).toBeVisible();
+  await expect(page.getByText(/change your initial password/i)).toBeVisible();
+  await page.getByLabel('Current password').fill(initial);
+  await page.getByLabel('New password').fill(replacement);
+  await page.getByRole('button', { name: 'Change password' }).click();
+  await expect(page.getByText('Password changed. Please sign in again.')).toBeVisible();
+  await page.getByLabel('Email address').fill(email);
+  await page.getByLabel('Password').fill(replacement);
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await page.getByRole('link', { name: 'My Profile' }).click();
+  await page.getByLabel('Default landing page').selectOption('applications');
+  await page.getByRole('button', { name: 'Save preference' }).click();
+  await expect(page.getByText('Landing preference saved.')).toBeVisible();
+  await page.reload();
+  await expect(page.getByLabel('Default landing page')).toHaveValue('applications');
+  await page.getByRole('button', { name: 'Sign out' }).click();
+  await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
+  expect(errors).toEqual([]);
+});
