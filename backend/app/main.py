@@ -11,6 +11,7 @@ from app.core.seed import seed_database
 from app.portfolios.router import router as portfolios_router
 from app.applications.router import router as applications_router
 from app.admin.router import router as admin_router
+from app.insights.router import router as insights_router
 
 
 @asynccontextmanager
@@ -36,6 +37,7 @@ app.include_router(router)
 app.include_router(portfolios_router)
 app.include_router(applications_router)
 app.include_router(admin_router)
+app.include_router(insights_router)
 
 
 @app.get("/api/health", tags=["health"])

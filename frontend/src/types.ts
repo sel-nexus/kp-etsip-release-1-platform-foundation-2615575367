@@ -30,3 +30,6 @@ export interface Page<T> { items: T[]; total: number; offset: number; limit: num
 export interface AdminUser extends User { managerName: string | null; vendorIndicator: boolean; lastLogin: string | null }
 export interface AdminRole { id: string; name: string; description: string; permissions: string[] }
 export interface AuditEvent { id: string; timestamp: string; userId: string | null; userName: string; action: string; entityType: string; entityId: string | null; details: string }
+
+export interface InsightPortfolio { id: string; name: string; owner: string; productArea: string; status: string; applicationCount: number; qualityScore: number | null; applicationsAtRisk: number }
+export interface ExecutiveMetrics { enterpriseQualityScore: number | null; applicationHealthScore: number | null; automationMaturityScore: number | null; openCriticalDefects: number; applicationsAtRisk: number; totalApplications: number; totalPortfolios: number; portfolios: InsightPortfolio[] }

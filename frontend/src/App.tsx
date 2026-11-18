@@ -9,6 +9,8 @@ import PortfolioDetail from './portfolios/PortfolioDetail';
 import Applications from './applications/Applications';
 import ApplicationDetail from './applications/ApplicationDetail';
 import Administration from './admin/Administration';
+import Dashboard from './insights/Dashboard';
+import Reports from './insights/Reports';
 
 /** Coordinate the persisted session and identity routes. */
 function AppRoutes() {
@@ -38,13 +40,14 @@ function AppRoutes() {
       <a className="skip" href="#main">Skip to content</a>
       <header className="header">
         <Link to="/" className="brand"><span className="brand-mark">K</span><span>KP ETSIP <small>PLATFORM FOUNDATION</small></span></Link>
-        {user && <nav aria-label="Account navigation">{!user.mustChangePassword && <><Link to="/applications">Applications</Link><Link to="/portfolios">Portfolios</Link>{['Administrator', 'Auditor'].includes(user.role) && <Link to="/administration">Administration</Link>}</>}<Link to="/profile">My Profile</Link><button className="text-button" onClick={signOut}>Sign out</button></nav>}
+        {user && <nav aria-label="Account navigation">{!user.mustChangePassword && <><Link to="/dashboard">Dashboard</Link><Link to="/applications">Applications</Link><Link to="/portfolios">Portfolios</Link><Link to="/reports">Reports</Link>{['Administrator', 'Auditor'].includes(user.role) && <Link to="/administration">Administration</Link>}</>}<Link to="/profile">My Profile</Link><button className="text-button" onClick={signOut}>Sign out</button></nav>}
       </header>
       {notice && <p className="session-notice" role="status">{notice}</p>}
       <Routes>
         <Route path="/login" element={user ? <Navigate to="/profile" replace /> : <Login onLogin={signedIn} />} />
         <Route path="/profile" element={user ? <Profile user={user} onUpdate={setUser} onPasswordChanged={() => { setToken(null); setUser(null); setNotice('Password changed. Please sign in again.'); navigate('/login'); }} /> : <Navigate to="/login" replace />} />
-        <Route path="/dashboard" element={user ? user.mustChangePassword ? <Navigate to="/profile" replace /> : <main id="main" className="content"><h1>Executive Dashboard</h1><p>This area is not yet available in the identity release.</p><Link to="/profile">Manage your profile</Link></main> : <Navigate to="/login" replace />} />
+        <Route path="/dashboard" element={user ? user.mustChangePassword ? <Navigate to="/profile" replace /> : <Dashboard /> : <Navigate to="/login" replace />} />
+        <Route path="/reports" element={user ? user.mustChangePassword ? <Navigate to="/profile" replace /> : <Reports user={user} /> : <Navigate to="/login" replace />} />
         <Route path="/applications" element={user ? user.mustChangePassword ? <Navigate to="/profile" replace /> : <Applications user={user} /> : <Navigate to="/login" replace />} />
         <Route path="/applications/new" element={user ? user.mustChangePassword ? <Navigate to="/profile" replace /> : <ApplicationDetail key="new" user={user} creating /> : <Navigate to="/login" replace />} />
         <Route path="/applications/:id" element={user ? user.mustChangePassword ? <Navigate to="/profile" replace /> : <ApplicationDetail key="detail" user={user} /> : <Navigate to="/login" replace />} />

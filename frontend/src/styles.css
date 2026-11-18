@@ -97,3 +97,11 @@ dt { color: var(--on-surface-variant); } dd { margin: 0; overflow-wrap: anywhere
 .admin-check input { width: auto; min-height: auto; }
 fieldset { border: 1px solid var(--card-border); padding: 16px; margin: 16px 0; }
 .portfolio-table td button + button { margin-left: 8px; }
+.insight-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 16px; margin: 32px 0; }
+.insight-metric { display: grid; gap: 8px; padding: 24px; }
+.insight-metric span { color: var(--on-surface-variant); font-size: 14px; }
+.insight-metric strong { color: var(--forest); font-size: 32px; font-variant-numeric: tabular-nums; }
+.insight-breakdown { margin-top: 40px; }
+.insight-list { list-style: none; margin: 0; padding: 0; }
+.insight-list li { display: flex; justify-content: space-between; gap: 16px; padding: 16px 0; border-bottom: 1px solid var(--card-border); font-variant-numeric: tabular-nums; }
+@media (max-width: 1000px) { nav { flex-wrap: wrap; gap: 12px; } }
